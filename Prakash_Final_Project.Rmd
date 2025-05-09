@@ -1,0 +1,144 @@
+---
+title: "Prakash_Final_Project"
+output: html_document
+date: "2025-05-08"
+---
+
+## Load and Explore Data
+
+```{r}
+# Load packages
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(randomForest)
+library(e1071)
+
+# Load data
+heart <- read.csv("heart.csv")
+str(heart)
+summary(heart)
+```
+
+## Preprocess the Data
+
+```{r}
+# Remove rows with thal = 0
+heart <- heart %>% filter(thal != 0)
+
+# Convert categorical variables to factors
+heart <- heart %>%
+  mutate(
+    sex = as.factor(sex),
+    cp = as.factor(cp),
+    fbs = as.factor(fbs),
+    restecg = as.factor(restecg),
+    exang = as.factor(exang),
+    slope = as.factor(slope),
+    ca = as.factor(ca),
+    thal = as.factor(thal),
+    target = as.factor(target)
+  )
+
+# Split into training and testing
+set.seed(123)
+trainIndex <- createDataPartition(heart$target, p = 0.8, list = FALSE)
+heart_train <- heart[trainIndex, ]
+heart_test <- heart[-trainIndex, ]
+
+# Align factor levels in test set to match training set
+for (col in names(heart)) {
+  if (is.factor(heart[[col]])) {
+    heart_test[[col]] <- factor(heart_test[[col]], levels = levels(heart_train[[col]]))
+  }
+}
+
+```
+
+
+## Build and Evaluate Models
+
+### Logistic Regression
+
+```{r}
+log_model <- glm(target ~ ., data = heart_train, family = "binomial")
+log_pred <- predict(log_model, newdata = heart_test, type = "response")
+
+log_pred_class <- ifelse(log_pred > 0.5, 1, 0)
+confusionMatrix(as.factor(log_pred_class), heart_test$target)
+
+```
+
+### Random Forest Model
+
+```{r}
+library(randomForest)
+
+set.seed(123)
+rf_model <- randomForest(target ~ ., data = heart_train, importance = TRUE)
+rf_pred <- predict(rf_model, heart_test)
+
+# Evaluate
+confusionMatrix(rf_pred, heart_test$target)
+
+```
+
+### Support Vector Machine (SVM)
+
+```{r}
+library(e1071)
+
+svm_model <- svm(target ~ ., data = heart_train)
+svm_pred <- predict(svm_model, heart_test)
+
+# Evaluate
+confusionMatrix(svm_pred, heart_test$target)
+
+```
+
+## Graphs and plots
+
+```{r}
+library(GGally)
+ggpairs(heart[, sapply(heart, is.numeric)])
+
+```
+
+```{r}
+varImpPlot(rf_model)
+
+```
+
+```{r}
+ggplot(heart, aes(x = target)) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Heart Disease Class Distribution", x = "Target", y = "Count")
+
+```
+
+```{r}
+ggplot(heart, aes(x = target, y = chol)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Cholesterol Levels by Heart Disease", x = "Target", y = "Cholesterol")
+
+```
+
+```{r}
+library(pROC)
+
+# For logistic regression
+roc_log <- roc(heart_test$target, log_pred)
+plot(roc_log, main = "ROC Curve - Logistic Regression", col = "blue")
+
+# Optional: Random forest (requires numeric probabilities)
+rf_probs <- predict(rf_model, heart_test, type = "prob")[,2]
+roc_rf <- roc(heart_test$target, rf_probs)
+plot(roc_rf, add = TRUE, col = "red")
+legend("bottomright", legend = c("Logistic", "Random Forest"), col = c("blue", "red"), lwd = 2)
+
+```
+
+
+
+
+
